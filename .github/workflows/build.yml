@@ -63,19 +63,20 @@ jobs:
       run: |
         set +e
         
-        # Проверяем, что программа прислала build.config
         if [ ! -f build.config ]; then
             echo "Ошибка: файл build.config не найден в корне репозитория!"
             exit 1
         fi
         
-        # Копируем присланный конфиг
         cp -f build.config padavan-ng/trunk/.config
         echo "::group::Сборка из build.config"
         
         pushd padavan-ng/trunk
         sed -i 's|\r$||g' .config
         . <(grep -hE '^\s*CONFIG_(VENDOR|FIRMWARE_PRODUCT_ID)=' .config)
+        
+        echo "FW_PRODUCT_ID=$CONFIG_FIRMWARE_PRODUCT_ID" >> $GITHUB_ENV
+        echo "FW_VENDOR=$CONFIG_VENDOR" >> $GITHUB_ENV
         
         ./clear_tree.sh >/dev/null 2>&1
         ./build_firmware.sh
@@ -86,7 +87,6 @@ jobs:
         
         popd
         
-        # Проверка размера
         partitions="padavan-ng/trunk/configs/boards/$CONFIG_VENDOR/$CONFIG_FIRMWARE_PRODUCT_ID/partitions.config"
         max_fw_size="$(awk '/Firmware/ { getline; getline; sub(",", ""); print strtonum($2); }' "$partitions")"
         fw_size="$(stat -c %s "padavan-ng/trunk/images/$FW_FILE_NAME")"
@@ -98,7 +98,6 @@ jobs:
           exit 1
         fi
 
-        # Подготовка артефакта
         FW_PATH="release/${FW_FILE_NAME%.*}"
         mkdir -p "$FW_PATH"
         cp -f "padavan-ng/trunk/images/$FW_FILE_NAME" "$FW_PATH"
@@ -111,7 +110,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: all_firmware_releases
+        name: firmware_${{ env.FW_VENDOR }}_${{ env.FW_PRODUCT_ID }}
         retention-days: 7
         path: |
           release/*
